@@ -1,13 +1,26 @@
+import json
+import sys
 from kafka import KafkaConsumer
 
 consumer = KafkaConsumer(
     "football-events",
     bootstrap_servers="localhost:9092",
-    group_id="statistics",
-    auto_offset_reset="earliest"
+    group_id="live-ticker",
+    auto_offset_reset="earliest",
+    value_deserializer=lambda m: json.loads(m.decode("utf-8"))
 )
 
-print("Warte auf Nachrichten...")
+consumer_name = sys.argv[1]
+
+print(f"{consumer_name} wartet auf Nachrichten...")
 
 for message in consumer:
-    print(message.value.decode())
+    event = message.value
+
+    print(
+        f"{consumer_name}: "
+        f"Partition {message.partition}, "
+        f"Offset {message.offset} -> "
+        f"{event['minute']}' {event['player']} "
+        f"({event['match']})"
+    )
