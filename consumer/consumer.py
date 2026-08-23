@@ -3,7 +3,7 @@ import sys
 from kafka import KafkaConsumer
 
 consumer = KafkaConsumer(
-    "football-events",
+    "football-events-json",
     bootstrap_servers="localhost:9092",
     group_id="live-ticker",
     auto_offset_reset="earliest",
