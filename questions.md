@@ -173,3 +173,210 @@ Producer und Consumer müssen sich auf ein gemeinsames Nachrichtenformat einigen
 Warum sollten live-ticker und statistics unterschiedliche Consumer Groups haben?
 
 Beide Consumer Groups verfolgen unterschiedliche Aufgaben, sollen aber alle Events unabhängig voneinander erhalten. Deshalb verwenden sie unterschiedliche Consumer Groups. Würden beide Consumer zur selben Group gehören, würden die Partitionen und damit die Events zwischen ihnen aufgeteilt.
+
+---
+
+## Was bedeutet Forward Compatibility bei Schema Evolution?
+
+**Meine Antwort:**
+
+Forward Compatibility bedeutet, dass ein älterer Consumer auch neuere Nachrichten weiterhin verarbeiten kann. Wird beispielsweise ein neues optionales Feld hinzugefügt, kann ein alter Consumer dieses Feld ignorieren und weiterhin die ihm bekannten Felder verwenden.
+
+---
+
+## Was bedeutet Backward Compatibility bei Schema Evolution?
+
+**Meine Antwort:**
+
+Backward Compatibility bedeutet, dass ein neuer Consumer auch ältere Nachrichten weiterhin verarbeiten kann. Der neue Consumer muss also mit Nachrichten umgehen können, die noch nach einer älteren Version des Schemas aufgebaut sind.
+
+---
+
+## Was ist der Unterschied zwischen unserem bisherigen producer.py und dem Producer über FastAPI?
+
+**Meine Antwort:**
+
+Bei `producer.py` waren Anzahl und Inhalt der Events fest im Skript definiert. Mit FastAPI können andere Anwendungen per HTTP-POST dynamisch neue Events senden. Kafka bleibt dabei gleich – nur die Art, wie der Producer seine Daten erhält, ändert sich.
+
+---
+
+## Warum ist FastAPI vor Kafka nützlich?
+
+**Meine Antwort:**
+
+Mit FastAPI müssen andere Anwendungen Kafka nicht direkt kennen oder auf die Python-Producer-Datei zugreifen. Sie müssen nur den HTTP-Endpunkt und das erwartete Schema kennen und können darüber Events senden. Dadurch können mehrere unterschiedliche Anwendungen dieselbe Schnittstelle verwenden, während FastAPI intern die Kafka-Kommunikation übernimmt.
+
+---
+
+## Was ist das Pydantic-Modell in unserer FastAPI-Anwendung?
+
+**Meine Antwort:**
+
+`FootballEvent` ist unser Pydantic-Modell, weil die Klasse von `BaseModel` aus Pydantic erbt. Darin definieren wir, welche Felder und Datentypen ein eingehendes Event haben soll. FastAPI kann damit eingehende Requests validieren und beispielsweise einen Request mit `minute = "hallo"` ablehnen, weil `minute` als Integer definiert ist.
+
+---
+
+## Warum ist es sinnvoll, Daten bereits in FastAPI zu validieren, bevor sie an Kafka gesendet werden?
+
+**Meine Antwort:**
+
+Fehlerhafte Daten werden dadurch möglichst früh abgefangen und gar nicht erst in Kafka geschrieben. Dadurch müssen nachgelagerte Consumer nicht mit offensichtlich ungültigen Nachrichten umgehen.
+
+---
+
+## Warum brauchen wir PostgreSQL zusätzlich zu Kafka?
+
+**Meine Antwort:**
+
+Kafka speichert die Event-Historie und zusätzlich den Lesefortschritt der Consumer Groups über Offsets. Der aus den Events berechnete Zustand, zum Beispiel die Anzahl der Tore pro Team, lag bei uns zunächst nur im Arbeitsspeicher des Python-Programms und ging beim Neustart verloren. PostgreSQL verwenden wir, um diesen berechneten Zustand dauerhaft zu speichern.
+
+---
+
+## Was ist der Unterschied zwischen einem Kafka-Offset und unserem berechneten Zustand?
+
+**Meine Antwort:**
+
+Der Offset beschreibt den Lesefortschritt einer Consumer Group innerhalb einer Partition. Er beantwortet also vereinfacht die Frage: „Bis wohin habe ich gelesen?“
+
+Der berechnete Zustand ist dagegen das Ergebnis der Verarbeitung dieser Nachrichten, zum Beispiel `Bayern = 2 Tore`. Dieser Zustand wird nicht automatisch durch den Kafka-Offset gespeichert und muss bei uns deshalb beispielsweise in PostgreSQL persistiert werden.
+
+---
+
+## Warum ging unsere Statistik vor PostgreSQL nach einem Neustart verloren?
+
+**Meine Antwort:**
+
+Die Torstatistik wurde nur in einer Python-Datenstruktur im Arbeitsspeicher gespeichert. Beim Beenden des Prozesses wurde dieser Arbeitsspeicher verworfen. Kafka kannte danach weiterhin den Lesefortschritt der Consumer Group, aber nicht mehr den daraus berechneten Torstand.
+
+---
+
+## Was ist ein Primary Key und warum verwenden wir team als Primary Key?
+
+**Meine Antwort:**
+
+Ein Primary Key identifiziert einen Datensatz innerhalb einer Tabelle eindeutig. In `team_statistics` verwenden wir `team` als Primary Key, damit beispielsweise `Bayern` nur einmal als Statistikzeile existiert und diese Zeile bei weiteren Bayern-Toren aktualisiert werden kann.
+
+---
+
+## Was bedeutet %s in unseren PostgreSQL-Abfragen?
+
+**Meine Antwort:**
+
+`%s` ist ein Platzhalter für einen Wert, den Python separat an PostgreSQL übergibt. Beispielsweise wird der Wert der Python-Variable `team` an dieser Stelle eingesetzt. Diese Parameterübergabe ist außerdem sicherer, als SQL-Abfragen selbst aus Strings zusammenzubauen, und schützt unter anderem vor SQL-Injection.
+
+---
+
+## Was macht INSERT ... ON CONFLICT ... DO UPDATE?
+
+**Meine Antwort:**
+
+Wenn ein Team noch nicht in `team_statistics` existiert, wird eine neue Zeile mit einem Tor angelegt. Existiert das Team aufgrund des Primary Keys bereits, entsteht ein Konflikt und `DO UPDATE` erhöht stattdessen den vorhandenen Torzähler um 1.
+
+Diese Kombination aus Einfügen und Aktualisieren wird häufig als Upsert bezeichnet.
+
+---
+
+## Welches Problem kann zwischen Kafka und PostgreSQL bei At-least-once entstehen?
+
+**Meine Antwort:**
+
+Der Consumer kann ein Kafka-Event erfolgreich verarbeiten und den berechneten Zustand in PostgreSQL speichern, aber anschließend abstürzen, bevor der Kafka-Offset committed wurde. Nach dem Neustart kann Kafka dasselbe Event erneut liefern. Würde der Consumer einfach wieder `goals + 1` ausführen, würde dasselbe Tor doppelt gezählt.
+
+---
+
+## Warum verwenden wir zusätzlich eine event_id?
+
+**Meine Antwort:**
+
+Die `event_id` identifiziert ein konkretes Event eindeutig. Dadurch kann der Consumer überprüfen, ob dieses Event bereits verarbeitet wurde. Wird dieselbe Kafka-Nachricht erneut verarbeitet, kann die Anwendung erkennen, dass die `event_id` bereits bekannt ist, und die fachliche Aktion nicht noch einmal ausführen.
+
+---
+
+## Ist die event_id dasselbe wie der Kafka-Key?
+
+**Meine Antwort:**
+
+Nein. In unserem Projekt verwenden wir beispielsweise `Bayern` als Kafka-Key, damit zusammengehörige Events nach der Kafka-Partitionierungslogik derselben Partition zugeordnet werden. Die `event_id` identifiziert dagegen ein einzelnes konkretes Event eindeutig.
+
+Beispiel:
+
+- Kafka-Key: `Bayern`
+- event_id: `goal-001`
+
+Bayern kann viele unterschiedliche Events haben, die jeweils eine eigene `event_id` besitzen.
+
+---
+
+## Warum speichern wir verarbeitete event_ids in einer eigenen Tabelle?
+
+**Meine Antwort:**
+
+Ein Team kann viele unterschiedliche Events besitzen. In `team_statistics` soll trotzdem nur eine Zeile pro Team existieren. Deshalb speichern wir die bereits verarbeiteten Events separat in `processed_events`. So kann der Consumer prüfen, ob eine bestimmte `event_id` bereits verarbeitet wurde.
+
+---
+
+## Warum ist event_id in processed_events ein Primary Key?
+
+**Meine Antwort:**
+
+Jede `event_id` soll eindeutig sein und nur einmal in `processed_events` vorkommen. Der Primary Key erzwingt diese Eindeutigkeit und ermöglicht außerdem eine effiziente Suche nach einer bestimmten `event_id`.
+
+---
+
+## Wie verhindert unser Statistics Consumer die doppelte Verarbeitung eines Events?
+
+**Meine Antwort:**
+
+Der Consumer liest die `event_id` aus dem Kafka-Event und prüft zunächst in PostgreSQL, ob diese ID bereits in `processed_events` vorhanden ist. Ist sie bereits vorhanden, wird die Torstatistik nicht erneut verändert. Ist sie noch nicht vorhanden, wird die Statistik aktualisiert und die `event_id` anschließend als verarbeitet gespeichert.
+
+Dadurch kann ein Event mehrfach aus Kafka gelesen werden, ohne dass es mehrfach fachlich ausgeführt wird.
+
+---
+
+## Warum führen wir Statistik-Update und Speichern der event_id in derselben Datenbanktransaktion aus?
+
+**Meine Antwort:**
+
+Beide Änderungen gehören fachlich zusammen. Würde zuerst der Torzähler erhöht und der Consumer danach vor dem Speichern der `event_id` abstürzen, könnte dasselbe Event später erneut gezählt werden.
+
+Durch eine gemeinsame Datenbanktransaktion werden entweder beide Änderungen erfolgreich gespeichert oder bei einem Fehler beide zurückgerollt.
+
+---
+
+## Was ist der Unterschied zwischen COMMIT und ROLLBACK in PostgreSQL?
+
+**Meine Antwort:**
+
+Mit `COMMIT` werden die Änderungen einer Datenbanktransaktion dauerhaft gespeichert. Mit `ROLLBACK` werden die noch nicht committeden Änderungen der Transaktion zurückgenommen, wenn beispielsweise während der Verarbeitung ein Fehler auftritt.
+
+---
+
+## Warum kann dasselbe Event im Live-Ticker mehrfach erscheinen, obwohl unsere Statistik es nur einmal zählt?
+
+**Meine Antwort:**
+
+Kafka kann dasselbe Event mehrfach enthalten beziehungsweise ausliefern. Unser Live-Ticker zeigt jede empfangene Kafka-Nachricht an und besitzt keine Duplikatprüfung anhand der `event_id`.
+
+Der Statistics Consumer arbeitet dagegen idempotent: Er prüft die `event_id` in PostgreSQL und verändert die Statistik nur beim ersten Verarbeiten dieses Events.
+
+---
+
+## Warum lesen wir GET /statistics aus PostgreSQL und nicht direkt aus Kafka?
+
+**Meine Antwort:**
+
+PostgreSQL speichert den bereits berechneten aktuellen Zustand dauerhaft. Kafka speichert dagegen die Event-Historie. Würden wir die aktuelle Statistik direkt aus Kafka erzeugen, müssten wir die Events zunächst erneut verarbeiten und daraus die Torzahlen berechnen.
+
+PostgreSQL kann den bereits berechneten Zustand direkt liefern.
+
+---
+
+## Wie sieht unser aktueller Datenfluss aus?
+
+**Meine Antwort:**
+
+Neue Events werden per HTTP-POST an FastAPI gesendet. FastAPI validiert die Daten und veröffentlicht das Event in Kafka. Consumer lesen die Kafka-Events und können unterschiedliche Aufgaben ausführen. Unser Statistics Consumer verarbeitet Tor-Events und speichert den berechneten Zustand dauerhaft in PostgreSQL. Über `GET /statistics` kann FastAPI diesen Zustand anschließend wieder aus PostgreSQL auslesen.
+
+Vereinfacht:
+
+`POST /events → FastAPI → Kafka → Consumer → PostgreSQL → GET /statistics`
