@@ -20,6 +20,14 @@ with connection.cursor() as cursor:
             event_id TEXT PRIMARY KEY
         )
     """)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS goal_events (
+        event_id TEXT PRIMARY KEY,
+        team TEXT NOT NULL,
+        minute INTEGER NOT NULL,
+        match_phase TEXT NOT NULL
+    )
+    """)
 
 connection.commit()
 connection.close()

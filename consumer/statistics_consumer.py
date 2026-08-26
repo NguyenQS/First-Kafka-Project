@@ -23,11 +23,29 @@ print("Statistics consumer wartet auf Nachrichten...")
 for message in consumer:
     event = message.value
 
+    # Transform
+    event["event"] = event["event"].strip().lower()
+    event["player"] = event["player"].strip()
+
+    team = message.key.decode("utf-8").strip().title()
+    event_id = event["event_id"]
+
+    minute = event["minute"]
+
+    if minute <= 45:
+        match_phase = "first_half"
+    elif minute <= 90:
+        match_phase = "second_half"
+    else:
+        match_phase = "stoppage_time"
+
+    print(
+        f"Transformiert: {team}, Minute {minute} "
+        f"-> {match_phase}"
+    )
+
     if event["event"] != "goal":
         continue
-
-    event_id = event["event_id"]
-    team = message.key.decode("utf-8")
 
     try:
         with connection.cursor() as cursor:
@@ -54,6 +72,14 @@ for message in consumer:
                 (team,)
             )
 
+            cursor.execute(
+                """
+                INSERT INTO goal_events (event_id, team, minute, match_phase)
+                VALUES (%s, %s, %s, %s)
+                """,
+                (event_id, team, minute, match_phase)
+            )
+
             # Event als verarbeitet markieren
             cursor.execute(
                 """
@@ -63,7 +89,6 @@ for message in consumer:
                 (event_id,)
             )
 
-        # Beide DB-Änderungen zusammen dauerhaft speichern
         connection.commit()
 
         print(f"{event_id}: Tor für {team} gespeichert.")
