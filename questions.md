@@ -380,3 +380,52 @@ Neue Events werden per HTTP-POST an FastAPI gesendet. FastAPI validiert die Date
 Vereinfacht:
 
 `POST /events → FastAPI → Kafka → Consumer → PostgreSQL → GET /statistics`
+
+---
+
+## ETL
+
+### Was bedeutet ETL?
+
+**Meine Antwort:**  
+ETL steht für Extract, Transform und Load. Daten werden zuerst aus einer Quelle gelesen, anschließend bereinigt, vereinheitlicht oder angereichert und danach in ein Zielsystem geladen. In meinem Projekt lese ich Fußball-Events aus Kafka, transformiere die Daten und speichere sie anschließend in PostgreSQL.
+
+### Wo befinden sich Extract, Transform und Load in meinem Projekt?
+
+**Meine Antwort:**  
+Extract ist das Lesen der Events aus Kafka im Statistics Consumer. Beim Transform bereinige ich zum Beispiel Team- und Spielernamen und leite aus der Spielminute eine neue Kategorie wie `first_half`, `second_half` oder `stoppage_time` ab. Beim Load speichere ich die transformierten Daten in PostgreSQL.
+
+### Was kann bei einem Transform-Schritt passieren?
+
+**Meine Antwort:**  
+Ein Transform-Schritt kann Daten zum Beispiel bereinigen, vereinheitlichen, filtern oder aus vorhandenen Daten neue Informationen ableiten. In meinem Projekt wird zum Beispiel `" bayern "` zu `"Bayern"` und aus Minute 93 wird `stoppage_time`.
+
+### Warum kann ein abgeleitetes Feld wie `match_phase` sinnvoll sein?
+
+**Meine Antwort:**  
+Das Feld ist leichter zu interpretieren und ermöglicht eine einfachere Gruppierung für spätere Analysen. Statt einzelne Minuten auszuwerten, kann ich zum Beispiel direkt zählen, wie viele Tore in der ersten Halbzeit, zweiten Halbzeit oder Nachspielzeit gefallen sind.
+
+### Muss das Ergebnis einer Transformation wieder in der eingehenden JSON stehen?
+
+**Meine Antwort:**  
+Nein. Die JSON ist bei meinem Projekt zunächst die eingehende Nachricht. Wenn ich eine neu berechnete Information später verwenden möchte, muss ich sie beim Load in einem geeigneten Zielsystem speichern. Ich speichere `match_phase` deshalb zusätzlich in PostgreSQL.
+
+### Warum speichere ich Events zusätzlich in PostgreSQL, obwohl sie bereits in Kafka liegen?
+
+**Meine Antwort:**  
+Kafka speichert den Event-Stream beziehungsweise die Ereignishistorie. PostgreSQL eignet sich besser dafür, daraus erzeugte Zustände und analysierbare Daten dauerhaft abzulegen und mit SQL abzufragen. In meinem Projekt kann ich dadurch zum Beispiel Tore nach `match_phase` gruppieren.
+
+### Ist Kafka selbst ein ETL-Tool?
+
+**Meine Antwort:**  
+Nicht direkt. Kafka transportiert und speichert Events und kann damit eine wichtige Komponente einer ETL- oder Streaming-Pipeline sein. Die eigentliche Transformation übernimmt in meinem Projekt mein Python-Consumer.
+
+### Kann ETL nur als Batch-Verarbeitung durchgeführt werden?
+
+**Meine Antwort:**  
+Nein. ETL kann auch kontinuierlich beziehungsweise als Streaming-Pipeline laufen. Mein Consumer verarbeitet neue Kafka-Events laufend, transformiert sie und schreibt sie anschließend nach PostgreSQL.
+
+### Wie habe ich meine ETL-Pipeline praktisch getestet?
+
+**Meine Antwort:**  
+Ich habe absichtlich uneinheitliche Daten wie `" GOAL "`, `" Kane "` und `"bayern"` über die API geschickt. Der Consumer hat sie normalisiert und zusätzlich aus der Minute eine `match_phase` erzeugt. Danach habe ich die transformierten Events in PostgreSQL gespeichert und mit `GROUP BY match_phase` aggregiert.
