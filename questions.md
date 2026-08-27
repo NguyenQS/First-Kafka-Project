@@ -429,3 +429,163 @@ Nein. ETL kann auch kontinuierlich beziehungsweise als Streaming-Pipeline laufen
 
 **Meine Antwort:**  
 Ich habe absichtlich uneinheitliche Daten wie `" GOAL "`, `" Kane "` und `"bayern"` über die API geschickt. Der Consumer hat sie normalisiert und zusätzlich aus der Minute eine `match_phase` erzeugt. Danach habe ich die transformierten Events in PostgreSQL gespeichert und mit `GROUP BY match_phase` aggregiert.
+
+---
+
+## Spark Basics
+
+### Wofür wird Apache Spark verwendet?
+
+**Meine Antwort:**
+
+Apache Spark ist eine Engine für die Verarbeitung großer Datenmengen. Daten können in Partitionen aufgeteilt und parallel von mehreren Workern verarbeitet werden. Spark eignet sich unter anderem für Transformationen, Filter, Aggregationen und Joins.
+
+---
+
+### Was ist der grundlegende Unterschied zwischen Kafka und Spark?
+
+**Meine Antwort:**
+
+Kafka ist hauptsächlich ein verteiltes Event-Streaming-System. Es nimmt Events entgegen, speichert sie in Topics und Partitionen und stellt sie Consumern zur Verfügung.
+
+Spark ist dagegen hauptsächlich für die Verarbeitung und Analyse von Daten zuständig. Spark kann beispielsweise große Datenmengen filtern, transformieren, gruppieren und aggregieren.
+
+Kafka kann eine Datenquelle für Spark sein, Spark kann aber auch Daten aus Dateien, Datenbanken oder anderen Quellen verarbeiten.
+
+---
+
+### Was ist ein Spark DataFrame?
+
+**Meine Antwort:**
+
+Ein Spark DataFrame ist eine tabellenartige Datenstruktur mit benannten Spalten. Die Daten können auf mehrere Spark-Partitionen verteilt und dadurch parallel verarbeitet werden.
+
+---
+
+### Was ist die Aufgabe einer Spark-Partition?
+
+**Meine Antwort:**
+
+Eine Spark-Partition ist ein Teil eines Datensatzes und dient als Arbeitspaket für die parallele Verarbeitung. Spark kann verschiedene Partitionen parallel bearbeiten lassen.
+
+Eine Spark-Partition ist nicht dasselbe wie eine Kafka-Partition. Kafka-Partitionen sind dauerhafte Bestandteile eines Topics, während Spark-Partitionen der verteilten Datenverarbeitung dienen.
+
+---
+
+### Was ist der Unterschied zwischen Driver, Worker, Task und Partition?
+
+**Meine Antwort:**
+
+Der Driver plant und koordiniert die Spark-Berechnung. Worker führen die eigentliche Arbeit aus. Ein Spark-Job wird in kleinere Tasks aufgeteilt. Ein Task verarbeitet dabei typischerweise eine Partition des Datensatzes.
+
+---
+
+### Was bedeutet Lazy Evaluation bei Spark?
+
+**Meine Antwort:**
+
+Transformationen wie `filter()` werden nicht unbedingt sofort ausgeführt. Spark merkt sich zunächst die gewünschten Verarbeitungsschritte.
+
+Erst eine Action wie `show()`, `count()` oder `collect()` fordert ein Ergebnis an und löst die tatsächliche Berechnung aus.
+
+Dadurch kennt Spark mehrere Verarbeitungsschritte im Voraus und kann den Ausführungsplan optimieren.
+
+---
+
+### Was ist der Unterschied zwischen einer Transformation und einer Action?
+
+**Meine Antwort:**
+
+Transformationen wie `filter()`, `select()` oder `withColumn()` beschreiben, wie ein neuer DataFrame erzeugt werden soll.
+
+Actions wie `show()`, `count()` oder `collect()` verlangen ein konkretes Ergebnis und lösen dadurch die Berechnung aus.
+
+---
+
+### Was ist ein Shuffle?
+
+**Meine Antwort:**
+
+Bei einem Shuffle werden Daten zwischen Spark-Partitionen neu verteilt.
+
+Das ist beispielsweise bei `groupBy()` notwendig, wenn Datensätze mit demselben Gruppierungsschlüssel zunächst auf unterschiedlichen Partitionen liegen. Spark muss die entsprechenden Daten oder Zwischenergebnisse zusammenbringen, um das Gesamtergebnis berechnen zu können.
+
+Ein Shuffle kann teuer sein, weil dabei in einem Cluster Daten zwischen Rechnern übertragen werden können.
+
+---
+
+### Warum verwendet Spark bei einer Aggregation teilweise zwei HashAggregate-Schritte?
+
+**Meine Antwort:**
+
+Spark kann zuerst innerhalb jeder Partition ein lokales Zwischenergebnis berechnen. Anschließend müssen beim Shuffle nur noch diese kleineren Zwischenergebnisse nach ihrem Key verteilt werden.
+
+Danach werden die Zwischenergebnisse zur endgültigen Aggregation zusammengeführt. Dadurch kann die zu übertragende Datenmenge deutlich reduziert werden.
+
+---
+
+### Was ist die Spark DataFrame API?
+
+**Meine Antwort:**
+
+Die Spark DataFrame API ist eine Programmierschnittstelle, über die Datenverarbeitungen mit Methoden wie `filter()`, `select()`, `withColumn()` oder `groupBy()` beschrieben werden können.
+
+Spark entscheidet anschließend selbst, wie diese Operationen ausgeführt und auf Partitionen verteilt werden.
+
+---
+
+### Was ist der Unterschied zwischen Spark DataFrame API und Spark SQL?
+
+**Meine Antwort:**
+
+Mit der DataFrame API beschreibe ich Transformationen über Methoden wie `filter()`, `select()` oder `groupBy()`.
+
+Mit Spark SQL kann ich strukturierte Daten mit SQL-Abfragen verarbeiten. In meinem Projekt habe ich dafür einen DataFrame als temporäre View registriert und anschließend eine SQL-Abfrage mit `GROUP BY` ausgeführt.
+
+Beide Varianten werden von Spark verarbeitet und optimiert und können miteinander kombiniert werden.
+
+---
+
+### Was macht `withColumn()`?
+
+**Meine Antwort:**
+
+Mit `withColumn()` kann eine neue Spalte erzeugt oder eine bestehende Spalte verändert werden.
+
+In meinem Projekt habe ich aus der Spielminute die neue Spalte `match_phase` mit den Kategorien `first_half`, `second_half` und `stoppage_time` erzeugt.
+
+---
+
+### Was passiert bei einem Left Join?
+
+**Meine Antwort:**
+
+Bei einem Left Join bleiben alle Zeilen des linken DataFrames erhalten. Wenn im rechten DataFrame ein passender Join-Key vorhanden ist, werden dessen Daten ergänzt. Gibt es keinen passenden Eintrag, enthalten die entsprechenden Spalten `NULL`.
+
+---
+
+### Warum kann ein Join einen Shuffle verursachen?
+
+**Meine Antwort:**
+
+Wenn zusammengehörige Join-Keys auf unterschiedlichen Partitionen liegen, muss Spark die Daten möglicherweise nach dem Join-Key neu verteilen, damit passende Datensätze zusammen verarbeitet werden können.
+
+---
+
+### Wann kann ein Broadcast Join sinnvoll sein?
+
+**Meine Antwort:**
+
+Wenn ein DataFrame sehr groß und der andere sehr klein ist, kann Spark den kleinen DataFrame an die Worker verteilen.
+
+Dadurch muss der große DataFrame nicht nach dem Join-Key neu verteilt werden. Das kann einen teuren Shuffle vermeiden oder reduzieren und Netzwerk- und Rechenaufwand sparen.
+
+---
+
+### Was habe ich mit Spark praktisch umgesetzt?
+
+**Meine Antwort:**
+
+Ich habe lokal mit PySpark einen Football-Event-DataFrame erstellt und unter anderem `select()`, `filter()`, `withColumn()`, `groupBy()` und `count()` ausgeführt.
+
+Ich habe aus der Spielminute eine `match_phase` abgeleitet, Daten nach dieser Spalte aggregiert, mit `explain()` den physischen Ausführungsplan einschließlich Shuffle betrachtet, denselben DataFrame über Spark SQL ausgewertet und einen Left Join mit einem zweiten DataFrame durchgeführt.
